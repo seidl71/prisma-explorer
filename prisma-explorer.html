@@ -1,0 +1,835 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PrismaExplorer – 3D Geometrie für Jonas</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --bg-deep:#070f1d; --bg-dark:#0f1e35; --bg-card:#132036; --bg-panel:#0d1b2e;
+    --border:#1e3558;
+    --blue:#3b82f6; --blue-l:#60a5fa;
+    --cyan:#06b6d4;
+    --green:#22c55e; --green-l:#4ade80;
+    --orange:#f59e0b; --orange-l:#fbbf24;
+    --purple:#a855f7; --purple-l:#c084fc;
+    --text:#e2e8f0; --text-m:#94a3b8; --text-d:#475569;
+  }
+  body { font-family:'Segoe UI',system-ui,sans-serif; background:var(--bg-deep); color:var(--text);
+         height:100vh; display:flex; flex-direction:column; overflow:hidden; }
+
+  /* HEADER */
+  header { background:linear-gradient(135deg,#0f2559,#1a1a6e); padding:12px 20px;
+           display:flex; align-items:center; gap:14px; border-bottom:1px solid #1e3a8a;
+           flex-shrink:0; box-shadow:0 4px 24px rgba(0,0,0,.5); }
+  .logo { width:40px; height:40px; background:linear-gradient(135deg,#3b82f6,#8b5cf6);
+          border-radius:10px; display:flex; align-items:center; justify-content:center;
+          font-size:22px; flex-shrink:0; }
+  .header-text h1 { font-size:20px; font-weight:700; color:#fff; }
+  .header-text p  { font-size:12px; color:#93c5fd; margin-top:1px; }
+  .header-badge { margin-left:auto; background:rgba(59,130,246,.15); border:1px solid rgba(59,130,246,.3);
+                  border-radius:20px; padding:5px 12px; font-size:12px; color:var(--blue-l); }
+
+  /* TABS */
+  nav { background:var(--bg-dark); border-bottom:1px solid var(--border);
+        padding:0 16px; display:flex; gap:4px; overflow-x:auto; flex-shrink:0; }
+  nav::-webkit-scrollbar { height:3px; }
+  nav::-webkit-scrollbar-thumb { background:var(--border); }
+  .tab { padding:10px 16px; border:none; background:transparent; color:var(--text-m);
+         cursor:pointer; font-size:13px; font-weight:500;
+         border-bottom:2px solid transparent; white-space:nowrap;
+         transition:color .2s,border-color .2s; display:flex; align-items:center; gap:6px; }
+  .tab:hover { color:var(--text); }
+  .tab.active { color:var(--blue-l); border-bottom-color:var(--blue); }
+
+  /* MAIN */
+  .main { display:flex; flex:1; overflow:hidden; }
+
+  /* 3D CANVAS */
+  .canvas-wrap { flex:0 0 48%; position:relative; background:var(--bg-deep);
+                 border-right:1px solid var(--border); }
+  #three-canvas { width:100%; height:100%; display:block; }
+  .canvas-hint { position:absolute; bottom:14px; left:50%; transform:translateX(-50%);
+                 background:rgba(0,0,0,.65); backdrop-filter:blur(6px); color:var(--text-m);
+                 font-size:11px; padding:5px 12px; border-radius:20px;
+                 border:1px solid var(--border); pointer-events:none; white-space:nowrap; }
+  .canvas-reset { position:absolute; top:12px; right:12px; background:rgba(0,0,0,.5);
+                  border:1px solid var(--border); color:var(--text-m); font-size:11px;
+                  padding:5px 10px; border-radius:8px; cursor:pointer;
+                  transition:color .2s,border-color .2s; }
+  .canvas-reset:hover { color:var(--blue-l); border-color:var(--blue); }
+
+  /* INFO PANEL */
+  .info-panel { flex:1; background:var(--bg-panel); overflow-y:auto; padding:18px;
+                display:flex; flex-direction:column; gap:14px; }
+  .info-panel::-webkit-scrollbar { width:5px; }
+  .info-panel::-webkit-scrollbar-thumb { background:var(--border); border-radius:3px; }
+  .shape-header h2 { font-size:20px; font-weight:700; }
+  .shape-header p  { font-size:13px; color:var(--text-m); margin-top:5px; line-height:1.5; }
+
+  /* CARDS */
+  .card { background:var(--bg-card); border:1px solid var(--border); border-radius:12px; overflow:hidden; }
+  .card-hdr { display:flex; align-items:center; gap:8px; padding:10px 14px;
+              font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.08em;
+              border-bottom:1px solid var(--border); }
+  .card-hdr.blue   { color:var(--blue-l);   background:rgba(59,130,246,.07); }
+  .card-hdr.green  { color:var(--green-l);  background:rgba(34,197,94,.07); }
+  .card-hdr.orange { color:var(--orange-l); background:rgba(245,158,11,.07); }
+  .card-hdr.purple { color:var(--purple-l); background:rgba(168,85,247,.07); }
+  .card-body { padding:14px; }
+
+  /* SLIDERS */
+  .slider-row { display:grid; grid-template-columns:24px 1fr 52px;
+                align-items:center; gap:10px; margin-bottom:12px; }
+  .slider-row:last-child { margin-bottom:0; }
+  .slider-lbl { font-size:14px; font-weight:700; color:var(--blue-l); text-align:center; }
+  input[type=range] { width:100%; height:5px; -webkit-appearance:none; appearance:none;
+                      background:var(--border); border-radius:3px; outline:none; cursor:pointer; }
+  input[type=range]::-webkit-slider-thumb { -webkit-appearance:none; width:16px; height:16px;
+                                            border-radius:50%; background:var(--blue);
+                                            border:2px solid var(--bg-deep); box-shadow:0 0 0 2px var(--blue); }
+  .slider-val { font-size:13px; font-weight:600; color:var(--text); text-align:right;
+                font-variant-numeric:tabular-nums; }
+
+  /* FORMULAS */
+  .formula-main { font-size:17px; font-weight:700; color:var(--text);
+                  font-family:'Courier New',monospace; margin-bottom:6px; }
+  .formula-result { font-size:22px; font-weight:800; margin:8px 0; font-variant-numeric:tabular-nums; }
+  .formula-result.green  { color:var(--green-l); }
+  .formula-result.orange { color:var(--orange-l); }
+  .formula-steps { margin-top:10px; border-top:1px solid var(--border); padding-top:10px; }
+  .step { font-size:12.5px; color:var(--text-m); font-family:'Courier New',monospace; line-height:1.7; }
+  .step strong { color:var(--text); }
+
+  /* PYTHAGORAS */
+  .pyth-item { border:1px solid rgba(168,85,247,.25); border-radius:8px; padding:12px;
+               margin-bottom:10px; background:rgba(168,85,247,.04); }
+  .pyth-item:last-child { margin-bottom:0; }
+  .pyth-heading { font-size:13px; font-weight:700; color:var(--purple-l); margin-bottom:3px; }
+  .pyth-desc { font-size:12px; color:var(--text-d); margin-bottom:8px; }
+  .pyth-eqn { font-size:14px; font-weight:700; color:var(--text); font-family:'Courier New',monospace;
+              background:rgba(0,0,0,.3); border-radius:6px; padding:6px 10px; margin-bottom:8px;
+              border-left:3px solid var(--purple); }
+  .pyth-step { font-size:12px; font-family:'Courier New',monospace; color:var(--text-m); line-height:1.7; }
+  .pyth-step strong { color:var(--purple-l); }
+
+  @media (max-width:768px) {
+    .main { flex-direction:column; }
+    .canvas-wrap { flex:0 0 280px; border-right:none; border-bottom:1px solid var(--border); }
+    body { overflow:auto; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">🔷</div>
+  <div class="header-text">
+    <h1>PrismaExplorer</h1>
+    <p>3D Geometrie interaktiv verstehen</p>
+  </div>
+  <div class="header-badge">Klasse 8 · Gerade Prismen</div>
+</header>
+
+<nav id="shape-tabs"></nav>
+
+<div class="main">
+  <div class="canvas-wrap">
+    <canvas id="three-canvas"></canvas>
+    <button class="canvas-reset" id="btn-reset">↺ Zurücksetzen</button>
+    <div class="canvas-hint">🖱️ Maus ziehen zum Drehen &nbsp;|&nbsp; Scrollrad = Zoom</div>
+  </div>
+  <div class="info-panel">
+    <div class="shape-header">
+      <h2 id="shape-name">–</h2>
+      <p id="shape-desc">–</p>
+    </div>
+    <div class="card">
+      <div class="card-hdr blue">📏 Maße</div>
+      <div class="card-body" id="sliders-body"></div>
+    </div>
+    <div class="card">
+      <div class="card-hdr green">📦 Volumen</div>
+      <div class="card-body">
+        <div class="formula-main" id="vol-formula"></div>
+        <div class="formula-result green" id="vol-result"></div>
+        <div class="formula-steps" id="vol-steps"></div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-hdr orange">📐 Oberfläche</div>
+      <div class="card-body">
+        <div class="formula-main" id="surf-formula"></div>
+        <div class="formula-result orange" id="surf-result"></div>
+        <div class="formula-steps" id="surf-steps"></div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-hdr purple">📐 Pythagoreischer Lehrsatz</div>
+      <div class="card-body" id="pyth-body"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ═══════════════════════════════════════════════════════
+//  MATH HELPERS
+// ═══════════════════════════════════════════════════════
+const sq  = n => n * n;
+const fmtS = (n, d = 2) => parseFloat(n.toFixed(d)).toString();
+
+
+// ═══════════════════════════════════════════════════════
+//  GEOMETRY CREATORS
+// ═══════════════════════════════════════════════════════
+function makeTriangularPrismGeom(a, h) {
+  const hG = a * Math.sqrt(3) / 2;
+  const up = hG * 2 / 3, dn = hG / 3, hh = h / 2;
+  const pos = new Float32Array([
+     0,  -hh,  up,  -a/2, -hh, -dn,   a/2, -hh, -dn,   // bottom
+     0,   hh,  up,  -a/2,  hh, -dn,   a/2,  hh, -dn,   // top
+  ]);
+  const idx = [
+    0,2,1, 3,4,5,
+    0,3,5, 0,5,2,
+    2,5,4, 2,4,1,
+    1,4,3, 1,3,0,
+  ];
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  g.setIndex(idx); g.computeVertexNormals();
+  return g;
+}
+
+function makeTrapezoidalPrismGeom(a, c, ht, hp) {
+  const hh = hp/2, ht2 = ht/2;
+  const pos = new Float32Array([
+    -a/2,-hh,-ht2,  a/2,-hh,-ht2,  c/2,-hh, ht2, -c/2,-hh, ht2,
+    -a/2, hh,-ht2,  a/2, hh,-ht2,  c/2, hh, ht2, -c/2, hh, ht2,
+  ]);
+  const idx = [
+    0,3,2, 0,2,1,  4,5,6, 4,6,7,
+    0,1,5, 0,5,4,  1,2,6, 1,6,5,
+    2,3,7, 2,7,6,  3,0,4, 3,4,7,
+  ];
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  g.setIndex(idx); g.computeVertexNormals();
+  return g;
+}
+
+function makePyramidGeom(a, h) {
+  const hw = a/2, yB = -h/2, yA = h/2;
+  const pos = new Float32Array([
+    -hw,yB,-hw,  hw,yB,-hw,  hw,yB, hw, -hw,yB, hw,  0,yA,0,
+  ]);
+  const idx = [0,3,2, 0,2,1,  0,1,4, 1,2,4, 2,3,4, 3,0,4];
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  g.setIndex(idx); g.computeVertexNormals();
+  return g;
+}
+
+
+// ═══════════════════════════════════════════════════════
+//  3D LABEL SPRITES
+// ═══════════════════════════════════════════════════════
+function makeLabel(text, hexColor) {
+  const W = 200, H = 88;
+  const cv = document.createElement('canvas');
+  cv.width = W; cv.height = H;
+  const ctx = cv.getContext('2d');
+
+  // Rounded-rect background
+  const r = 14;
+  ctx.clearRect(0, 0, W, H);
+  ctx.fillStyle = 'rgba(4,10,22,0.92)';
+  ctx.beginPath();
+  ctx.moveTo(r,0); ctx.lineTo(W-r,0); ctx.arcTo(W,0,W,r,r);
+  ctx.lineTo(W,H-r); ctx.arcTo(W,H,W-r,H,r);
+  ctx.lineTo(r,H); ctx.arcTo(0,H,0,H-r,r);
+  ctx.lineTo(0,r); ctx.arcTo(0,0,r,0,r);
+  ctx.closePath(); ctx.fill();
+
+  // Border
+  ctx.strokeStyle = hexColor; ctx.lineWidth = 3.5; ctx.stroke();
+
+  // Text
+  const fs = text.length === 1 ? 54 : text.length === 2 ? 42 : 32;
+  ctx.fillStyle = hexColor;
+  ctx.font = `bold ${fs}px 'Courier New', monospace`;
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.fillText(text, W/2, H/2 + 2);
+
+  const tex = new THREE.CanvasTexture(cv);
+  const mat = new THREE.SpriteMaterial({ map: tex, depthTest: false, transparent: true });
+  const sp  = new THREE.Sprite(mat);
+  sp.scale.set(0.72, 0.32, 1);
+  sp.renderOrder = 999;
+  return sp;
+}
+
+
+// ═══════════════════════════════════════════════════════
+//  DIMENSION ANNOTATION (dashed line + tick marks + label)
+// ═══════════════════════════════════════════════════════
+function makeAnnotation(x1,y1,z1, x2,y2,z2, text, hexColor) {
+  const grp = new THREE.Group();
+  const col = new THREE.Color(hexColor);
+
+  // Dashed dim line
+  const pts = [new THREE.Vector3(x1,y1,z1), new THREE.Vector3(x2,y2,z2)];
+  const lineGeo = new THREE.BufferGeometry().setFromPoints(pts);
+  const lineMat = new THREE.LineDashedMaterial({
+    color: col, dashSize: 0.10, gapSize: 0.055,
+    transparent: true, opacity: 0.82
+  });
+  const ln = new THREE.Line(lineGeo, lineMat);
+  ln.computeLineDistances();
+  ln.renderOrder = 998;
+  grp.add(ln);
+
+  // Tick marks (perpendicular to the line)
+  const dir = new THREE.Vector3(x2-x1, y2-y1, z2-z1).normalize();
+  const up  = Math.abs(dir.y) < 0.9
+    ? new THREE.Vector3(0,1,0)
+    : new THREE.Vector3(1,0,0);
+  const tickDir = dir.clone().cross(up).normalize().multiplyScalar(0.18);
+
+  [[x1,y1,z1],[x2,y2,z2]].forEach(([tx,ty,tz]) => {
+    const center = new THREE.Vector3(tx,ty,tz);
+    const tp1 = center.clone().sub(tickDir);
+    const tp2 = center.clone().add(tickDir);
+    const tGeo = new THREE.BufferGeometry().setFromPoints([tp1, tp2]);
+    const tMat = new THREE.LineBasicMaterial({ color: col, transparent: true, opacity: 0.75 });
+    const tl = new THREE.Line(tGeo, tMat);
+    tl.renderOrder = 998;
+    grp.add(tl);
+  });
+
+  // Label sprite at midpoint
+  const sp = makeLabel(text, hexColor);
+  sp.position.set((x1+x2)/2, (y1+y2)/2, (z1+z2)/2);
+  grp.add(sp);
+
+  return grp;
+}
+
+
+// ═══════════════════════════════════════════════════════
+//  SHAPE DEFINITIONS
+// ═══════════════════════════════════════════════════════
+// getAnnotations: returns array of annotation params in SCENE units (already ×sc)
+// Colors: blue=l/a, green=b/c, yellow=h, purple=ht
+
+const SHAPES = {
+
+  wuerfel: {
+    name: 'Würfel', icon: '🎲', color: 0x3b82f6,
+    desc: 'Ein Würfel hat alle 6 Seiten als gleich große Quadrate. Er ist ein Spezialfall des Quaders mit l = b = h = a.',
+    params: [
+      { key:'a', label:'Seite a', min:1, max:8, step:0.5, value:4, unit:'cm' },
+    ],
+    getGeom(p) { return new THREE.BoxGeometry(p.a, p.a, p.a); },
+    getAnnotations(p, sc) {
+      const a = p.a*sc, h = a/2, O = 0.30;
+      return [
+        // 'a': bottom-front edge (x-direction)
+        { x1:-h,y1:-h-O,z1:h+O,  x2:h,y2:-h-O,z2:h+O,  text:'a', color:'#60a5fa' },
+      ];
+    },
+    calc(p) {
+      const { a } = p;
+      const V = Math.pow(a,3), O = 6*sq(a);
+      const f = a*Math.sqrt(2), d = a*Math.sqrt(3);
+      return {
+        volumen:    { formula:'V = a³', result:`${fmtS(V)} cm³`,
+                      steps:[`V = a³ = ${a}³ = <strong>${fmtS(V)} cm³</strong>`] },
+        oberflaeche:{ formula:'O = 6 · a²', result:`${fmtS(O)} cm²`,
+                      steps:[`O = 6 · a² = 6 · ${sq(a)} = <strong>${fmtS(O)} cm²</strong>`] },
+        pythagoras:[
+          { heading:'Flächendiagonale f', desc:'Diagonale einer quadratischen Seitenfläche',
+            eqn:'f² = a² + a²  →  f = a · √2',
+            steps:[`f² = ${a}² + ${a}² = ${2*sq(a)}`,
+                   `f = √${2*sq(a)} = a·√2 ≈ <strong>${fmtS(f)} cm</strong>`] },
+          { heading:'Raumdiagonale d', desc:'Verbindet zwei gegenüberliegende Ecken',
+            eqn:'d² = f² + a²  →  d = a · √3',
+            steps:[`d² = f² + a² = ${fmtS(sq(f))} + ${sq(a)} = ${fmtS(sq(f)+sq(a))}`,
+                   `d = a·√3 ≈ <strong>${fmtS(d)} cm</strong>`] },
+        ],
+      };
+    },
+  },
+
+  quader: {
+    name: 'Quader', icon: '📦', color: 0x0ea5e9,
+    desc: 'Ein Quader hat 6 rechteckige Seiten. Gegenüberliegende Seiten sind gleich. Volumen = Länge × Breite × Höhe.',
+    params: [
+      { key:'l', label:'Länge l',  min:1, max:8, step:0.5, value:6, unit:'cm' },
+      { key:'b', label:'Breite b', min:1, max:8, step:0.5, value:4, unit:'cm' },
+      { key:'h', label:'Höhe h',   min:1, max:8, step:0.5, value:3, unit:'cm' },
+    ],
+    getGeom(p) { return new THREE.BoxGeometry(p.l, p.h, p.b); },
+    getAnnotations(p, sc) {
+      const l=p.l*sc, b=p.b*sc, h=p.h*sc, O=0.30;
+      return [
+        // 'l': bottom-front (x-direction)
+        { x1:-l/2,y1:-h/2-O,z1:b/2+O,  x2:l/2,y2:-h/2-O,z2:b/2+O, text:'l', color:'#60a5fa' },
+        // 'b': bottom-right (z-direction)
+        { x1:l/2+O,y1:-h/2-O,z1:-b/2,  x2:l/2+O,y2:-h/2-O,z2:b/2,  text:'b', color:'#4ade80' },
+        // 'h': right-front (y-direction)
+        { x1:l/2+O,y1:-h/2,z1:b/2+O,   x2:l/2+O,y2:h/2,z2:b/2+O,   text:'h', color:'#fbbf24' },
+      ];
+    },
+    calc(p) {
+      const { l, b, h } = p;
+      const V=l*b*h, O=2*(l*b+l*h+b*h);
+      const dG=Math.sqrt(sq(l)+sq(b)), d=Math.sqrt(sq(l)+sq(b)+sq(h));
+      return {
+        volumen:    { formula:'V = l · b · h', result:`${fmtS(V)} cm³`,
+                      steps:[`V = l · b · h = ${l} · ${b} · ${h} = <strong>${fmtS(V)} cm³</strong>`] },
+        oberflaeche:{ formula:'O = 2·(l·b + l·h + b·h)', result:`${fmtS(O)} cm²`,
+                      steps:[`2·l·b = 2·${l*b} = ${2*l*b} cm²`,
+                             `2·l·h = 2·${l*h} = ${2*l*h} cm²`,
+                             `2·b·h = 2·${b*h} = ${2*b*h} cm²`,
+                             `O = ${2*l*b}+${2*l*h}+${2*b*h} = <strong>${fmtS(O)} cm²</strong>`] },
+        pythagoras:[
+          { heading:'Schritt 1 – Grundflächen-Diagonale d₁', desc:'Pythagoras auf der Bodenfläche (l × b)',
+            eqn:'d₁² = l² + b²',
+            steps:[`d₁² = ${l}² + ${b}² = ${sq(l)} + ${sq(b)} = ${sq(l)+sq(b)}`,
+                   `d₁ = √${sq(l)+sq(b)} ≈ <strong>${fmtS(dG)} cm</strong>`] },
+          { heading:'Schritt 2 – Raumdiagonale d', desc:'d₁ und h bilden ein rechtwinkliges Dreieck',
+            eqn:'d² = d₁² + h²  =  l² + b² + h²',
+            steps:[`d² = ${fmtS(sq(dG))} + ${sq(h)} = ${fmtS(sq(dG)+sq(h))}`,
+                   `d ≈ <strong>${fmtS(d)} cm</strong>`] },
+        ],
+      };
+    },
+  },
+
+  quadPrisma: {
+    name: 'Quad. Prisma', icon: '⬛', color: 0x06b6d4,
+    desc: 'Gerades Prisma mit quadratischer Grundfläche (a × a). Spezialfall des Quaders mit l = b = a.',
+    params: [
+      { key:'a', label:'Seite a', min:1, max:8, step:0.5, value:3, unit:'cm' },
+      { key:'h', label:'Höhe h',  min:1, max:8, step:0.5, value:6, unit:'cm' },
+    ],
+    getGeom(p) { return new THREE.BoxGeometry(p.a, p.h, p.a); },
+    getAnnotations(p, sc) {
+      const a=p.a*sc, h=p.h*sc, O=0.30;
+      return [
+        { x1:-a/2,y1:-h/2-O,z1:a/2+O,  x2:a/2,y2:-h/2-O,z2:a/2+O, text:'a', color:'#60a5fa' },
+        { x1:a/2+O,y1:-h/2,z1:a/2+O,   x2:a/2+O,y2:h/2,z2:a/2+O,  text:'h', color:'#fbbf24' },
+      ];
+    },
+    calc(p) {
+      const { a, h } = p;
+      const G=sq(a), V=G*h, M=4*a*h, O=2*G+M;
+      const dG=a*Math.sqrt(2), d=Math.sqrt(2*sq(a)+sq(h));
+      return {
+        volumen:    { formula:'V = a² · h', result:`${fmtS(V)} cm³`,
+                      steps:[`G = a² = ${sq(a)} cm²`,
+                             `V = G · h = ${sq(a)} · ${h} = <strong>${fmtS(V)} cm³</strong>`] },
+        oberflaeche:{ formula:'O = 2·a² + 4·a·h', result:`${fmtS(O)} cm²`,
+                      steps:[`Grundflächen: 2·a² = ${2*sq(a)} cm²`,
+                             `Mantel: 4·a·h = ${4*a*h} cm²`,
+                             `O = ${2*sq(a)} + ${4*a*h} = <strong>${fmtS(O)} cm²</strong>`] },
+        pythagoras:[
+          { heading:'Grundflächen-Diagonale d_G', desc:'Diagonale des Quadrats a × a',
+            eqn:'d_G² = a² + a² = 2·a²',
+            steps:[`d_G² = ${sq(a)} + ${sq(a)} = ${2*sq(a)}`,
+                   `d_G = a·√2 ≈ <strong>${fmtS(dG)} cm</strong>`] },
+          { heading:'Raumdiagonale d', desc:'Von einer Bodenecke zur gegenüberliegenden Deckenecke',
+            eqn:'d² = 2·a² + h²',
+            steps:[`d² = ${fmtS(sq(dG))} + ${sq(h)} = ${fmtS(sq(dG)+sq(h))}`,
+                   `d ≈ <strong>${fmtS(d)} cm</strong>`] },
+        ],
+      };
+    },
+  },
+
+  dreieckPrisma: {
+    name: 'Dreieck-Prisma', icon: '🔺', color: 0x22c55e,
+    desc: 'Gerades Prisma mit gleichseitigem Dreieck als Grundfläche. Die Dreieckshöhe wird mit dem Pythagoreischen Lehrsatz berechnet.',
+    params: [
+      { key:'a', label:'Seite a', min:1, max:8, step:0.5, value:4, unit:'cm' },
+      { key:'h', label:'Höhe h',  min:1, max:8, step:0.5, value:5, unit:'cm' },
+    ],
+    getGeom(p) { return makeTriangularPrismGeom(p.a, p.h); },
+    getAnnotations(p, sc) {
+      const a=p.a*sc, h=p.h*sc, O=0.30;
+      const hG = a*Math.sqrt(3)/2, dn = hG/3;
+      return [
+        // 'a': back-bottom edge (x-direction), back of shape is at z=-dn
+        { x1:-a/2,y1:-h/2-O,z1:-dn-O,  x2:a/2,y2:-h/2-O,z2:-dn-O, text:'a', color:'#4ade80' },
+        // 'h': right-back vertical edge
+        { x1:a/2+O,y1:-h/2,z1:-dn-O,   x2:a/2+O,y2:h/2,z2:-dn-O,  text:'h', color:'#fbbf24' },
+      ];
+    },
+    calc(p) {
+      const { a, h } = p;
+      const hG=a*Math.sqrt(3)/2, G=(a*hG)/2;
+      const V=G*h, U=3*a, M=U*h, O=2*G+M;
+      return {
+        volumen:    { formula:'V = G · h', result:`≈ ${fmtS(V)} cm³`,
+                      steps:[`h_Δ (PLS!) ≈ ${fmtS(hG)} cm`,
+                             `G = (a·h_Δ)/2 = (${a}·${fmtS(hG)})/2 ≈ ${fmtS(G)} cm²`,
+                             `V = G·h = ${fmtS(G)}·${h} ≈ <strong>${fmtS(V)} cm³</strong>`] },
+        oberflaeche:{ formula:'O = 2·G + U·h', result:`≈ ${fmtS(O)} cm²`,
+                      steps:[`G ≈ ${fmtS(G)} cm²`,
+                             `U = 3·a = ${U} cm`,
+                             `M = U·h = ${U}·${h} = ${fmtS(M)} cm²`,
+                             `O = 2·${fmtS(G)} + ${fmtS(M)} ≈ <strong>${fmtS(O)} cm²</strong>`] },
+        pythagoras:[
+          { heading:'Höhe h_Δ des gleichseitigen Dreiecks',
+            desc:'Die Höhe teilt das Dreieck: Hypotenuse a, eine Kathete a/2',
+            eqn:'h_Δ² + (a/2)² = a²   →   h_Δ² = a² – (a/2)²',
+            steps:[`h_Δ² = ${sq(a)} – ${sq(a/2)} = ${sq(a)-sq(a/2)}`,
+                   `h_Δ = √${sq(a)-sq(a/2)} = (√3/2)·a ≈ <strong>${fmtS(hG)} cm</strong>`,
+                   `→ G = (${a}·${fmtS(hG)})/2 ≈ ${fmtS(G)} cm²`] },
+        ],
+      };
+    },
+  },
+
+  trapezPrisma: {
+    name: 'Trapez-Prisma', icon: '⬠', color: 0xf59e0b,
+    desc: 'Gerades Prisma mit symmetrischem Trapez als Grundfläche (a unten, c oben, Höhe ht). Die Schenkel werden mit dem PLS bestimmt.',
+    params: [
+      { key:'a',  label:'Seite a (unten)',  min:2, max:10, step:0.5, value:6, unit:'cm' },
+      { key:'c',  label:'Seite c (oben)',   min:1, max:8,  step:0.5, value:3, unit:'cm' },
+      { key:'ht', label:'Höhe Trapez ht',   min:1, max:6,  step:0.5, value:3, unit:'cm' },
+      { key:'hp', label:'Höhe Prisma h',    min:1, max:8,  step:0.5, value:5, unit:'cm' },
+    ],
+    getGeom(p) { return makeTrapezoidalPrismGeom(p.a, p.c, p.ht, p.hp); },
+    getAnnotations(p, sc) {
+      const a=p.a*sc, c=p.c*sc, ht=p.ht*sc, hp=p.hp*sc, O=0.30;
+      return [
+        // 'a': front edge at z=-ht/2 (x-direction)
+        { x1:-a/2,y1:-hp/2-O,z1:-ht/2-O,  x2:a/2,y2:-hp/2-O,z2:-ht/2-O, text:'a', color:'#60a5fa' },
+        // 'c': back edge at z=+ht/2 (x-direction)
+        { x1:-c/2,y1:-hp/2-O,z1:ht/2+O,   x2:c/2,y2:-hp/2-O,z2:ht/2+O,  text:'c', color:'#4ade80' },
+        // 'ht': right side, front-to-back (z-direction) at bottom level
+        { x1:a/2+O,y1:-hp/2,z1:-ht/2,     x2:a/2+O,y2:-hp/2,z2:ht/2,    text:'ht', color:'#c084fc' },
+        // 'h': right-front vertical (y-direction)
+        { x1:a/2+O,y1:-hp/2,z1:-ht/2-O,   x2:a/2+O,y2:hp/2,z2:-ht/2-O,  text:'h', color:'#fbbf24' },
+      ];
+    },
+    calc(p) {
+      const { a, c, ht, hp } = p;
+      const diff=( a-c)/2, sch=Math.sqrt(sq(ht)+sq(diff));
+      const G=(a+c)/2*ht, V=G*hp, U=a+c+2*sch, M=U*hp, O=2*G+M;
+      return {
+        volumen:    { formula:'V = G · h', result:`≈ ${fmtS(V)} cm³`,
+                      steps:[`G = (a+c)/2·ht = (${a}+${c})/2·${ht} = ${fmtS(G)} cm²`,
+                             `V = G·h = ${fmtS(G)}·${hp} = <strong>${fmtS(V)} cm³</strong>`] },
+        oberflaeche:{ formula:'O = 2·G + U·h', result:`≈ ${fmtS(O)} cm²`,
+                      steps:[`G = ${fmtS(G)} cm²`,
+                             `Schenkel s ≈ ${fmtS(sch)} cm  (PLS!)`,
+                             `U = a+c+2s = ${fmtS(U)} cm`,
+                             `O ≈ 2·${fmtS(G)} + ${fmtS(M)} = <strong>${fmtS(O)} cm²</strong>`] },
+        pythagoras:[
+          { heading:'Schenkel s des symmetrischen Trapezes',
+            desc:'Rechtwinkliges Dreieck: ht als Kathete, (a–c)/2 als andere Kathete',
+            eqn:'s² = ht² + ((a–c)/2)²',
+            steps:[`(a–c)/2 = (${a}–${c})/2 = ${diff} cm`,
+                   `s² = ${sq(ht)} + ${sq(diff)} = ${sq(ht)+sq(diff)}`,
+                   `s = √${sq(ht)+sq(diff)} ≈ <strong>${fmtS(sch)} cm</strong>`] },
+        ],
+      };
+    },
+  },
+
+  pyramide: {
+    name: 'Pyramide', icon: '🔼', color: 0xa855f7,
+    desc: 'Gerade quadratische Pyramide. Apothema und Seitenkante werden mit dem Pythagoreischen Lehrsatz berechnet.',
+    params: [
+      { key:'a', label:'Seite a', min:1, max:8, step:0.5, value:4, unit:'cm' },
+      { key:'h', label:'Höhe h',  min:1, max:8, step:0.5, value:5, unit:'cm' },
+    ],
+    getGeom(p) { return makePyramidGeom(p.a, p.h); },
+    getAnnotations(p, sc) {
+      const a=p.a*sc, h=p.h*sc, O=0.30;
+      return [
+        // 'a': front base edge (x-direction)
+        { x1:-a/2,y1:-h/2-O,z1:a/2+O,  x2:a/2,y2:-h/2-O,z2:a/2+O, text:'a', color:'#60a5fa' },
+        // 'h': right side vertical (y-direction) from base to apex height
+        { x1:a/2+O,y1:-h/2,z1:0,        x2:a/2+O,y2:h/2,z2:0,       text:'h', color:'#fbbf24' },
+      ];
+    },
+    calc(p) {
+      const { a, h } = p;
+      const G=sq(a), s=Math.sqrt(sq(h)+sq(a/2)), e=Math.sqrt(sq(h)+sq(a)*0.5);
+      const Af=a*s/2, M=4*Af, O=G+M, V=G*h/3;
+      return {
+        volumen:    { formula:'V = ⅓ · G · h', result:`≈ ${fmtS(V)} cm³`,
+                      steps:[`G = a² = ${sq(a)} cm²`,
+                             `V = (1/3)·${sq(a)}·${h} = <strong>${fmtS(V)} cm³</strong>`] },
+        oberflaeche:{ formula:'O = G + 4·(a·s/2)', result:`≈ ${fmtS(O)} cm²`,
+                      steps:[`G = a² = ${sq(a)} cm²`,
+                             `Apothema s ≈ ${fmtS(s)} cm  (PLS!)`,
+                             `Dreiecksfläche = a·s/2 ≈ ${fmtS(Af)} cm²`,
+                             `O = ${G} + 4·${fmtS(Af)} ≈ <strong>${fmtS(O)} cm²</strong>`] },
+        pythagoras:[
+          { heading:'Apothema s (Schrägkante zur Kantenmitte)',
+            desc:'Rechtwinkliges Dreieck: Höhe h, halbe Grundkante a/2',
+            eqn:'s² = h² + (a/2)²',
+            steps:[`s² = ${sq(h)} + ${sq(a/2)} = ${sq(h)+sq(a/2)}`,
+                   `s ≈ <strong>${fmtS(s)} cm</strong>`] },
+          { heading:'Seitenkante e (Apex → Ecke der Grundfläche)',
+            desc:'Rechtwinkliges Dreieck: h und halbe Grundflächendiagonale',
+            eqn:'e² = h² + (a·√2/2)² = h² + a²/2',
+            steps:[`Halbe Diagonale = a·√2/2 ≈ ${fmtS(a*Math.SQRT2/2)} cm`,
+                   `e² = ${sq(h)} + ${fmtS(sq(a)*0.5)} = ${fmtS(sq(h)+sq(a)*0.5)}`,
+                   `e ≈ <strong>${fmtS(e)} cm</strong>`] },
+        ],
+      };
+    },
+  },
+};
+
+const SHAPE_KEYS = Object.keys(SHAPES);
+
+
+// ═══════════════════════════════════════════════════════
+//  STATE
+// ═══════════════════════════════════════════════════════
+let currentKey = 'wuerfel';
+let params = {};
+const paramCache = {};
+
+function initParams(key) {
+  params = {};
+  SHAPES[key].params.forEach(pd => {
+    params[pd.key] = (paramCache[key]?.[pd.key] ?? pd.value);
+  });
+}
+function saveParams(key) { paramCache[key] = { ...params }; }
+
+
+// ═══════════════════════════════════════════════════════
+//  THREE.JS SETUP
+// ═══════════════════════════════════════════════════════
+const canvasEl   = document.getElementById('three-canvas');
+const canvasWrap = canvasEl.parentElement;
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x06101e);
+scene.add(new THREE.GridHelper(14, 14, 0x0d2040, 0x0d2040));
+
+const camera = new THREE.PerspectiveCamera(42, 1, 0.1, 500);
+camera.position.set(7, 5.5, 9);
+
+const renderer = new THREE.WebGLRenderer({ canvas: canvasEl, antialias: true });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+
+// Lights
+scene.add(new THREE.AmbientLight(0xffffff, 0.45));
+const dl1 = new THREE.DirectionalLight(0xffffff, 0.85); dl1.position.set(6,10,8); scene.add(dl1);
+const dl2 = new THREE.DirectionalLight(0x4488ff, 0.25); dl2.position.set(-5,-3,-4); scene.add(dl2);
+const dl3 = new THREE.DirectionalLight(0xffffff, 0.2);  dl3.position.set(0,-8,0); scene.add(dl3);
+
+// ShapeGroup — single rotating container for mesh + edges + annotations
+const shapeGroup = new THREE.Group();
+scene.add(shapeGroup);
+
+function clearGroup() {
+  while (shapeGroup.children.length > 0) {
+    const c = shapeGroup.children[0];
+    if (c.geometry) c.geometry.dispose();
+    if (c.material) {
+      if (Array.isArray(c.material)) c.material.forEach(m => m.dispose());
+      else c.material.dispose();
+    }
+    shapeGroup.remove(c);
+  }
+}
+
+function buildShape(geom, hexColor, annotations) {
+  clearGroup();
+
+  // Solid mesh
+  const mat = new THREE.MeshPhongMaterial({
+    color: hexColor, transparent: true, opacity: 0.78,
+    side: THREE.DoubleSide, shininess: 55,
+    specular: new THREE.Color(0x334466),
+  });
+  shapeGroup.add(new THREE.Mesh(geom, mat));
+
+  // Wireframe edges
+  const edgeMat = new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.88 });
+  shapeGroup.add(new THREE.LineSegments(new THREE.EdgesGeometry(geom), edgeMat));
+
+  // Dimension annotations
+  annotations.forEach(ann => {
+    shapeGroup.add(makeAnnotation(
+      ann.x1, ann.y1, ann.z1,
+      ann.x2, ann.y2, ann.z2,
+      ann.text, ann.color
+    ));
+  });
+}
+
+// Rotation & zoom state
+let rotX = 0.25, rotY = 0.6, zoomD = 1.0;
+let isDragging = false, lastX = 0, lastY = 0;
+let autoSpin = true;
+
+canvasEl.addEventListener('mousedown', e => { isDragging=true; autoSpin=false; lastX=e.clientX; lastY=e.clientY; });
+window.addEventListener('mousemove', e => {
+  if (!isDragging) return;
+  rotY += (e.clientX-lastX)*0.012;
+  rotX += (e.clientY-lastY)*0.012;
+  rotX = Math.max(-1.3, Math.min(1.3, rotX));
+  lastX=e.clientX; lastY=e.clientY;
+});
+window.addEventListener('mouseup', () => { isDragging=false; });
+
+canvasEl.addEventListener('wheel', e => {
+  zoomD = Math.max(0.4, Math.min(3.5, zoomD + e.deltaY*0.001));
+  e.preventDefault();
+}, { passive:false });
+
+canvasEl.addEventListener('touchstart', e => {
+  isDragging=true; autoSpin=false; lastX=e.touches[0].clientX; lastY=e.touches[0].clientY;
+}, { passive:true });
+canvasEl.addEventListener('touchmove', e => {
+  if (!isDragging) return;
+  rotY += (e.touches[0].clientX-lastX)*0.014;
+  rotX += (e.touches[0].clientY-lastY)*0.014;
+  lastX=e.touches[0].clientX; lastY=e.touches[0].clientY;
+}, { passive:true });
+canvasEl.addEventListener('touchend', () => { isDragging=false; });
+
+document.getElementById('btn-reset').addEventListener('click', () => {
+  rotX=0.25; rotY=0.6; zoomD=1.0; autoSpin=true;
+});
+
+function resize() {
+  const w=canvasWrap.clientWidth, h=canvasWrap.clientHeight;
+  renderer.setSize(w, h);
+  camera.aspect = w/h;
+  camera.updateProjectionMatrix();
+}
+window.addEventListener('resize', resize); resize();
+
+function animate() {
+  requestAnimationFrame(animate);
+  if (autoSpin) rotY += 0.006;
+  shapeGroup.rotation.x = rotX;
+  shapeGroup.rotation.y = rotY;
+  camera.position.setLength(15 * zoomD);
+  camera.lookAt(0,0,0);
+  renderer.render(scene, camera);
+}
+animate();
+
+
+// ═══════════════════════════════════════════════════════
+//  UI
+// ═══════════════════════════════════════════════════════
+function buildTabs() {
+  const nav = document.getElementById('shape-tabs');
+  SHAPE_KEYS.forEach(key => {
+    const s = SHAPES[key];
+    const btn = document.createElement('button');
+    btn.className = 'tab' + (key===currentKey ? ' active' : '');
+    btn.dataset.key = key;
+    btn.innerHTML = `<span>${s.icon}</span> ${s.name}`;
+    btn.addEventListener('click', () => selectShape(key));
+    nav.appendChild(btn);
+  });
+}
+
+function selectShape(key) {
+  saveParams(currentKey); currentKey=key; initParams(key);
+  document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.key===key));
+  renderAll();
+}
+
+function buildSliders(key) {
+  const body = document.getElementById('sliders-body');
+  body.innerHTML = '';
+  SHAPES[key].params.forEach(pd => {
+    const row = document.createElement('div');
+    row.className = 'slider-row';
+
+    const lbl = document.createElement('div');
+    lbl.className = 'slider-lbl';
+    // Extract just the letter (first word after splitting)
+    lbl.textContent = pd.label.split(' ')[1] || pd.key;
+
+    const inp = document.createElement('input');
+    inp.type='range'; inp.min=pd.min; inp.max=pd.max; inp.step=pd.step; inp.value=params[pd.key];
+
+    const val = document.createElement('div');
+    val.className = 'slider-val';
+    val.textContent = `${params[pd.key]} ${pd.unit}`;
+
+    inp.addEventListener('input', () => {
+      params[pd.key] = parseFloat(inp.value);
+      val.textContent = `${params[pd.key]} ${pd.unit}`;
+      updateFormulas(); update3D();
+    });
+
+    row.append(lbl, inp, val);
+    body.appendChild(row);
+  });
+}
+
+function stepsHtml(arr) {
+  return arr.map(s => `<div class="step">${s}</div>`).join('');
+}
+function pythHtml(items) {
+  return items.map(it => `
+    <div class="pyth-item">
+      <div class="pyth-heading">${it.heading}</div>
+      <div class="pyth-desc">${it.desc}</div>
+      <div class="pyth-eqn">${it.eqn}</div>
+      ${it.steps.map(s => `<div class="pyth-step">${s}</div>`).join('')}
+    </div>`).join('');
+}
+
+function updateFormulas() {
+  const d = SHAPES[currentKey].calc(params);
+  document.getElementById('vol-formula').textContent  = d.volumen.formula;
+  document.getElementById('vol-result').textContent   = d.volumen.result;
+  document.getElementById('vol-steps').innerHTML      = stepsHtml(d.volumen.steps);
+  document.getElementById('surf-formula').textContent = d.oberflaeche.formula;
+  document.getElementById('surf-result').textContent  = d.oberflaeche.result;
+  document.getElementById('surf-steps').innerHTML     = stepsHtml(d.oberflaeche.steps);
+  document.getElementById('pyth-body').innerHTML      = pythHtml(d.pythagoras);
+}
+
+function update3D() {
+  const shape = SHAPES[currentKey];
+  const geom  = shape.getGeom(params);
+
+  // Normalize: longest dimension → 3.2 scene units
+  const maxD = Math.max(...Object.values(params), 1);
+  const sc   = 3.2 / maxD;
+  geom.scale(sc, sc, sc);
+
+  const annotations = shape.getAnnotations(params, sc);
+  buildShape(geom, shape.color, annotations);
+}
+
+function renderAll() {
+  const s = SHAPES[currentKey];
+  document.getElementById('shape-name').textContent = s.name;
+  document.getElementById('shape-desc').textContent = s.desc;
+  buildSliders(currentKey);
+  updateFormulas();
+  update3D();
+}
+
+
+// ═══════════════════════════════════════════════════════
+//  INIT
+// ═══════════════════════════════════════════════════════
+buildTabs(); initParams(currentKey); renderAll();
+</script>
+</body>
+</html>

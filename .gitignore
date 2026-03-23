@@ -1,0 +1,22 @@
+# Persönliche Schuldokumente – nicht ins Repository
+*.pdf
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# Editor-Dateien
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Node (falls später npm-Pakete hinzugefügt werden)
+node_modules/
